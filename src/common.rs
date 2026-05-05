@@ -65,6 +65,42 @@ pub const DEFAULT_KEEP_ALIVE: i32 = 60_000;
 
 const MIN_VER_MULTI_UI_SESSION: &str = "1.2.4";
 
+#[inline]
+fn has_embedded_server_defaults() -> bool {
+    !embedded_rendezvous_server().is_empty()
+        || !embedded_relay_server().is_empty()
+        || !embedded_api_server().is_empty()
+        || !embedded_key().is_empty()
+}
+
+#[inline]
+fn embedded_rendezvous_server() -> &'static str {
+    option_env!("RUSTDESK_DEFAULT_RENDEZVOUS_SERVER")
+        .map(str::trim)
+        .unwrap_or("")
+}
+
+#[inline]
+fn embedded_relay_server() -> &'static str {
+    option_env!("RUSTDESK_DEFAULT_RELAY_SERVER")
+        .map(str::trim)
+        .unwrap_or("")
+}
+
+#[inline]
+fn embedded_api_server() -> &'static str {
+    option_env!("RUSTDESK_DEFAULT_API_SERVER")
+        .map(str::trim)
+        .unwrap_or("")
+}
+
+#[inline]
+fn embedded_key() -> &'static str {
+    option_env!("RUSTDESK_DEFAULT_KEY")
+        .map(str::trim)
+        .unwrap_or("")
+}
+
 pub mod input {
     pub const MOUSE_TYPE_MOVE: i32 = 0;
     pub const MOUSE_TYPE_DOWN: i32 = 1;
@@ -1038,6 +1074,9 @@ pub fn get_custom_rendezvous_server(custom: String) -> String {
     if !custom.is_empty() {
         return custom;
     }
+    if !embedded_rendezvous_server().is_empty() {
+        return embedded_rendezvous_server().to_owned();
+    }
     if !config::PROD_RENDEZVOUS_SERVER.read().unwrap().is_empty() {
         return config::PROD_RENDEZVOUS_SERVER.read().unwrap().clone();
     }
@@ -1049,12 +1088,14 @@ pub fn get_api_server(api: String, custom: String) -> String {
     if Config::no_register_device() {
         return "".to_owned();
     }
+    let use_embedded_api = api.is_empty() && !embedded_api_server().is_empty();
     let mut res = get_api_server_(api, custom);
     if res.ends_with('/') {
         res.pop();
     }
     if res.starts_with("https")
         && res.ends_with(":21114")
+        && !use_embedded_api
         && get_builtin_option(keys::OPTION_ALLOW_HTTPS_21114) != "Y"
     {
         return res.replace(":21114", "");
@@ -1071,6 +1112,9 @@ fn get_api_server_(api: String, custom: String) -> String {
     }
     if !api.is_empty() {
         return api.to_owned();
+    }
+    if !embedded_api_server().is_empty() {
+        return embedded_api_server().to_owned();
     }
     let s0 = get_custom_rendezvous_server(custom);
     if !s0.is_empty() {
@@ -1818,6 +1862,9 @@ pub async fn get_key(sync: bool) -> String {
         let mut options = crate::ipc::get_options_async().await;
         options.remove("key").unwrap_or_default()
     };
+    if key.is_empty() && !embedded_key().is_empty() {
+        key = embedded_key().to_owned();
+    }
     if key.is_empty() {
         key = config::RS_PUB_KEY.to_owned();
     }
@@ -2100,6 +2147,26 @@ pub fn load_custom_client() {
             return;
         };
         read_custom_client(&data.trim());
+    }
+}
+
+pub fn apply_embedded_server_defaults() {
+    if !has_embedded_server_defaults() {
+        return;
+    }
+
+    let defaults = [
+        ("custom-rendezvous-server", embedded_rendezvous_server()),
+        ("relay-server", embedded_relay_server()),
+        ("api-server", embedded_api_server()),
+        ("key", embedded_key()),
+    ];
+
+    for (key, value) in defaults {
+        if value.is_empty() || !get_option(key).is_empty() {
+            continue;
+        }
+        set_option(key.to_owned(), value.to_owned());
     }
 }
 
