@@ -74,6 +74,14 @@ fn has_embedded_server_defaults() -> bool {
 }
 
 #[inline]
+fn force_embedded_server_config() -> bool {
+    matches!(
+        option_env!("RUSTDESK_FORCE_SERVER_CONFIG").map(str::trim),
+        Some("1" | "true" | "TRUE" | "yes" | "YES" | "on" | "ON")
+    )
+}
+
+#[inline]
 fn embedded_rendezvous_server() -> &'static str {
     option_env!("RUSTDESK_DEFAULT_RENDEZVOUS_SERVER")
         .map(str::trim)
@@ -1065,6 +1073,9 @@ pub fn is_setup(name: &str) -> bool {
 }
 
 pub fn get_custom_rendezvous_server(custom: String) -> String {
+    if force_embedded_server_config() && !embedded_rendezvous_server().is_empty() {
+        return embedded_rendezvous_server().to_owned();
+    }
     #[cfg(windows)]
     if let Ok(lic) = crate::platform::windows::get_license_from_exe_name() {
         if !lic.host.is_empty() {
@@ -1088,7 +1099,8 @@ pub fn get_api_server(api: String, custom: String) -> String {
     if Config::no_register_device() {
         return "".to_owned();
     }
-    let use_embedded_api = api.is_empty() && !embedded_api_server().is_empty();
+    let use_embedded_api = (api.is_empty() || force_embedded_server_config())
+        && !embedded_api_server().is_empty();
     let mut res = get_api_server_(api, custom);
     if res.ends_with('/') {
         res.pop();
@@ -1104,6 +1116,9 @@ pub fn get_api_server(api: String, custom: String) -> String {
 }
 
 fn get_api_server_(api: String, custom: String) -> String {
+    if force_embedded_server_config() && !embedded_api_server().is_empty() {
+        return embedded_api_server().to_owned();
+    }
     #[cfg(windows)]
     if let Ok(lic) = crate::platform::windows::get_license_from_exe_name() {
         if !lic.api.is_empty() {
@@ -1847,6 +1862,9 @@ pub fn decode64<T: AsRef<[u8]>>(input: T) -> Result<Vec<u8>, base64::DecodeError
 }
 
 pub async fn get_key(sync: bool) -> String {
+    if force_embedded_server_config() && !embedded_key().is_empty() {
+        return embedded_key().to_owned();
+    }
     #[cfg(windows)]
     if let Ok(lic) = crate::platform::windows::get_license_from_exe_name() {
         if !lic.key.is_empty() {
@@ -2155,11 +2173,43 @@ pub fn apply_embedded_server_defaults() {
         return;
     }
 
+    if force_embedded_server_config() {
+        let forced = [
+            (keys::OPTION_CUSTOM_RENDEZVOUS_SERVER, embedded_rendezvous_server()),
+            (keys::OPTION_RELAY_SERVER, embedded_relay_server()),
+            (keys::OPTION_API_SERVER, embedded_api_server()),
+            (keys::OPTION_KEY, embedded_key()),
+        ];
+
+        {
+            let mut overwrite = config::OVERWRITE_SETTINGS.write().unwrap();
+            for (key, value) in forced {
+                if value.is_empty() {
+                    continue;
+                }
+                overwrite.insert(key.to_owned(), value.to_owned());
+            }
+        }
+
+        config::BUILTIN_SETTINGS
+            .write()
+            .unwrap()
+            .insert(keys::OPTION_HIDE_SERVER_SETTINGS.to_owned(), "Y".to_owned());
+
+        for (key, value) in forced {
+            if value.is_empty() {
+                continue;
+            }
+            set_option(key.to_owned(), "".to_owned());
+        }
+        return;
+    }
+
     let defaults = [
-        ("custom-rendezvous-server", embedded_rendezvous_server()),
-        ("relay-server", embedded_relay_server()),
-        ("api-server", embedded_api_server()),
-        ("key", embedded_key()),
+        (keys::OPTION_CUSTOM_RENDEZVOUS_SERVER, embedded_rendezvous_server()),
+        (keys::OPTION_RELAY_SERVER, embedded_relay_server()),
+        (keys::OPTION_API_SERVER, embedded_api_server()),
+        (keys::OPTION_KEY, embedded_key()),
     ];
 
     for (key, value) in defaults {
