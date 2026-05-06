@@ -1,4 +1,4 @@
-name: User Windows Build
+name: User Windows Hard Lock Build
 
 on:
   workflow_dispatch:
@@ -14,6 +14,7 @@ env:
   RUSTDESK_DEFAULT_RELAY_SERVER: "rustdesk.kinzersky.ru"
   RUSTDESK_DEFAULT_API_SERVER: "https://rustdesk.kinzersky.ru:21114"
   RUSTDESK_DEFAULT_KEY: "eL7p3CELv+zv++GpBeK6rGwzIoiOw3ykBUD2CtarQwo="
+  RUSTDESK_FORCE_SERVER_CONFIG: "1"
 
 jobs:
   build-windows:
@@ -126,17 +127,17 @@ jobs:
           python3 ./generate.py -f ../../rustdesk/ -o . -e ../../rustdesk/rustdesk.exe
           popd
           mkdir -p ./artifacts
-          mv ./target/release/rustdesk-portable-packer.exe ./artifacts/rustdesk-1.4.6-x86_64-portable.exe
+          mv ./target/release/rustdesk-portable-packer.exe ./artifacts/rustdesk-1.4.6-x86_64-hardlock-portable.exe
 
       - name: Pack folder build
         shell: bash
         run: |
           mkdir -p ./artifacts
           cd ./rustdesk
-          powershell -Command "Compress-Archive -Path * -DestinationPath ../artifacts/rustdesk-1.4.6-x86_64-editable.zip -Force"
+          powershell -Command "Compress-Archive -Path * -DestinationPath ../artifacts/rustdesk-1.4.6-x86_64-hardlock.zip -Force"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: rustdesk-user-windows-x86_64
+          name: rustdesk-user-windows-hardlock-x86_64
           path: artifacts
